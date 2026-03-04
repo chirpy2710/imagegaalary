@@ -1,18 +1,27 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>A-Frame 360 Local Image Gallery with Hotspots & Gyroscope</title>
+  <title>A-Frame 360 Gallery - TECHXR Controller</title>
 
-  <!-- LOCAL A-Frame -->
-   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <!-- A-Frame -->
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 
   <script>
-    // Component to change 360 image on hotspot click
-    AFRAME.registerComponent('change-scene', {
-      schema: { target: {type: 'string'} },
+    // Change scene when trigger pressed on hotspot
+    AFRAME.registerComponent('controller-change-scene', {
       init: function () {
-        this.el.addEventListener('click', () => {
-          document.querySelector('#sky').setAttribute('src', this.data.target);
+
+        this.el.addEventListener('triggerdown', () => {
+
+          let intersectedEls = this.el.components.raycaster.intersectedEls;
+
+          if (intersectedEls.length > 0) {
+            let target = intersectedEls[0].getAttribute('data-target');
+            if (target) {
+              document.querySelector('#sky').setAttribute('src', target);
+            }
+          }
+
         });
       }
     });
@@ -30,9 +39,16 @@
     <img id="img3" src="img3.jpg">
   </a-assets>
 
-  <!-- Camera with gyroscope and mouse support -->
-  <a-camera position="0 1.6 0" look-controls cursor="rayOrigin: mouse" raycaster="objects: .clickable">
-  </a-camera>
+  <!-- Camera -->
+  <a-camera position="0 1.6 0"></a-camera>
+
+  <!-- TECHXR Right Controller -->
+  <a-entity
+      id="rightHand"
+      laser-controls="hand: right"
+      raycaster="objects: .clickable; showLine: true"
+      controller-change-scene>
+  </a-entity>
 
   <!-- 360 Sky -->
   <a-sky id="sky" src="#img1" rotation="0 -90 0"></a-sky>
@@ -41,10 +57,10 @@
   <a-circle class="clickable"
             position="-2 1.5 -3"
             radius="0.3"
-            material="color: red"
-            change-scene="target: #img1">
+            color="red"
+            data-target="#img1">
   </a-circle>
-  <!-- Label for Hotspot 1 -->
+
   <a-text value="Living Room"
           position="-2 2.1 -3"
           color="white"
@@ -56,10 +72,10 @@
   <a-circle class="clickable"
             position="0 1.5 -3"
             radius="0.3"
-            material="color: blue"
-            change-scene="target: #img2">
+            color="blue"
+            data-target="#img2">
   </a-circle>
-  <!-- Label for Hotspot 2 -->
+
   <a-text value="Kitchen"
           position="0 2.1 -3"
           color="white"
@@ -71,10 +87,10 @@
   <a-circle class="clickable"
             position="2 1.5 -3"
             radius="0.3"
-            material="color: green"
-            change-scene="target: #img3">
+            color="green"
+            data-target="#img3">
   </a-circle>
-  <!-- Label for Hotspot 3 -->
+
   <a-text value="Bedroom"
           position="2 2.1 -3"
           color="white"
@@ -86,6 +102,3 @@
 
 </body>
 </html>
-
-
-
