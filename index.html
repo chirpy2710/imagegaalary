@@ -4,31 +4,19 @@
 <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 
 <script>
-AFRAME.registerComponent('controller-grab', {
-  init: function () {
-    this.grabbed = null;
-  },
+AFRAME.registerComponent("ray-test",{
+ init:function(){
 
-  tick: function () {
+  this.el.addEventListener("raycaster-intersection",function(e){
+     e.detail.els[0].setAttribute("color","yellow")
+  })
 
-    let gamepads = navigator.getGamepads();
-    if (!gamepads[0]) return;
+  this.el.addEventListener("raycaster-intersection-cleared",function(e){
+     document.querySelector("#cube").setAttribute("color","red")
+  })
 
-    let trigger = gamepads[0].buttons[0].pressed;
-
-    if (trigger && !this.grabbed) {
-      let cube = document.querySelector("#cube");
-      this.grabbed = cube;
-      this.el.appendChild(cube);
-      cube.setAttribute("position","0 -0.2 -0.5");
-    }
-
-    if (!trigger && this.grabbed) {
-      document.querySelector("a-scene").appendChild(this.grabbed);
-      this.grabbed = null;
-    }
-  }
-});
+ }
+})
 </script>
 
 </head>
@@ -38,8 +26,9 @@ AFRAME.registerComponent('controller-grab', {
 <a-scene>
 
 <a-box id="cube"
-       position="0 1.5 -3"
-       color="red">
+       position="0 1.6 -3"
+       color="red"
+       class="clickable">
 </a-box>
 
 <a-plane rotation="-90 0 0"
@@ -48,7 +37,14 @@ AFRAME.registerComponent('controller-grab', {
          color="#7BC8A4">
 </a-plane>
 
-<a-camera position="0 1.6 0" controller-grab></a-camera>
+<a-entity id="controller"
+          laser-controls
+          raycaster="objects: .clickable"
+          line="color:green"
+          ray-test>
+</a-entity>
+
+<a-camera position="0 1.6 0"></a-camera>
 
 </a-scene>
 
