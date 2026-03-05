@@ -1,433 +1,56 @@
-
-
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <title>TechXR – Grab & Drop VR</title>
+<script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 
-  <!-- A-Frame core -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/aframe/1.4.2/aframe.min.js"></script>
+<script>
+AFRAME.registerComponent('controller-grab', {
+  init: function () {
+    this.grabbed = null;
+  },
 
-  <style>
-    body { margin: 0; background: #000; overflow: hidden; }
-    #info {
-      position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
-      background: rgba(0,0,0,0.7); color: #0ff; font-family: monospace;
-      font-size: 14px; padding: 8px 18px; border-radius: 20px;
-      border: 1px solid #0ff4; pointer-events: none; z-index: 99;
-      letter-spacing: 1px;
+  tick: function () {
+
+    let gamepads = navigator.getGamepads();
+    if (!gamepads[0]) return;
+
+    let trigger = gamepads[0].buttons[0].pressed;
+
+    if (trigger && !this.grabbed) {
+      let cube = document.querySelector("#cube");
+      this.grabbed = cube;
+      this.el.appendChild(cube);
+      cube.setAttribute("position","0 -0.2 -0.5");
     }
-  </style>
+
+    if (!trigger && this.grabbed) {
+      document.querySelector("a-scene").appendChild(this.grabbed);
+      this.grabbed = null;
+    }
+  }
+});
+</script>
+
 </head>
+
 <body>
-<div id="info">🎮 TechXR VR · Trigger = Grab · Release = Drop</div>
 
-<a-scene
-  background="color: #0a0a1a"
-  renderer="antialias: true; colorManagement: true"
-  vr-mode-ui="enabled: true"
->
+<a-scene>
 
-  <!-- ══════════════════════════════════════════
-       CUSTOM COMPONENTS
-  ══════════════════════════════════════════ -->
-  <script>
-    /* ── grabbable component ───────────────────────────────────────────── */
-    AFRAME.registerComponent('grabbable', {
-      schema: {
-        hand: { type: 'string', default: '' }   // which hand is holding this
-      },
-      init () {
-        this.held       = false;
-        this.heldBy     = null;   // controller entity
-        this.offset     = new THREE.Vector3();
-        this.qOffset    = new THREE.Quaternion();
+<a-box id="cube"
+       position="0 1.5 -3"
+       color="red">
+</a-box>
 
-        // highlight on hover
-        this.el.addEventListener('mouseenter', () => {
-          if (!this.held) this._setGlow(true);
-        });
-        this.el.addEventListener('mouseleave', () => {
-          if (!this.held) this._setGlow(false);
-        });
-      },
+<a-plane rotation="-90 0 0"
+         width="10"
+         height="10"
+         color="#7BC8A4">
+</a-plane>
 
-      grab (controllerEl) {
-        this.held   = true;
-        this.heldBy = controllerEl;
-        this._setGlow(true);
-
-        // Store local offset so object doesn't snap to controller origin
-        const objWorld  = new THREE.Vector3();
-        const ctrlWorld = new THREE.Vector3();
-        const ctrlQuat  = new THREE.Quaternion();
-
-        this.el.object3D.getWorldPosition(objWorld);
-        controllerEl.object3D.getWorldPosition(ctrlWorld);
-        controllerEl.object3D.getWorldQuaternion(ctrlQuat);
-
-        this.offset.subVectors(objWorld, ctrlWorld);
-        this.offset.applyQuaternion(ctrlQuat.clone().invert());
-
-        this.qOffset.copy(ctrlQuat).invert()
-          .multiply(this.el.object3D.quaternion);
-      },
-
-      release () {
-        this.held   = false;
-        this.heldBy = null;
-        this._setGlow(false);
-      },
-
-      tick () {
-        if (!this.held || !this.heldBy) return;
-
-        const ctrl      = this.heldBy.object3D;
-        const ctrlWorld = new THREE.Vector3();
-        const ctrlQuat  = new THREE.Quaternion();
-        ctrl.getWorldPosition(ctrlWorld);
-        ctrl.getWorldQuaternion(ctrlQuat);
-
-        // World position = controller + rotated offset
-        const worldPos = this.offset.clone()
-          .applyQuaternion(ctrlQuat)
-          .add(ctrlWorld);
-
-        // Convert back to local space (parent)
-        const parent = this.el.object3D.parent;
-        if (parent) {
-          parent.worldToLocal(worldPos);
-        }
-        this.el.object3D.position.copy(worldPos);
-
-        // Rotation
-        const newQuat = ctrlQuat.clone().multiply(this.qOffset);
-        this.el.object3D.quaternion.copy(newQuat);
-      },
-
-      _setGlow (on) {
-        const mesh = this.el.getObject3D('mesh');
-        if (!mesh) return;
-        mesh.traverse(node => {
-          if (node.isMesh && node.material) {
-            node.material.emissive    = on
-              ? new THREE.Color(0x00ffff)
-              : new THREE.Color(0x000000);
-            node.material.emissiveIntensity = on ? 0.4 : 0;
-          }
-        });
-      }
-    });
-
-    /* ── techxr-controller component ──────────────────────────────────── */
-    AFRAME.registerComponent('techxr-controller', {
-      schema: {
-        hand: { type: 'string', default: 'right' }
-      },
-
-      init () {
-        this.heldObject  = null;
-        this.raycaster   = this.el.components.raycaster;
-
-        // TechXR maps trigger to 'triggerdown' / 'triggerup'
-        // Also handle mouse click for desktop testing
-        this.el.addEventListener('triggerdown',  () => this._tryGrab());
-        this.el.addEventListener('triggerup',    () => this._tryDrop());
-        this.el.addEventListener('mousedown',    () => this._tryGrab());   // desktop test
-        this.el.addEventListener('mouseup',      () => this._tryDrop());
-
-        // Also listen for gripdown as secondary grab button
-        this.el.addEventListener('gripdown',     () => this._tryGrab());
-        this.el.addEventListener('gripup',       () => this._tryDrop());
-
-        // Cursor / raycaster intersection events
-        this.el.addEventListener('raycaster-intersection', e => {
-          this._hoveredEl = e.detail.els[0] || null;
-        });
-        this.el.addEventListener('raycaster-intersection-cleared', () => {
-          this._hoveredEl = null;
-        });
-      },
-
-      _tryGrab () {
-        if (this.heldObject) return;   // already holding something
-
-        // Find nearest grabbable intersected
-        const rc = this.el.components.raycaster;
-        const intersections = rc ? rc.intersections : [];
-
-        let target = null;
-        for (const hit of intersections) {
-          const comp = hit.object.el && hit.object.el.components.grabbable;
-          if (comp && !comp.held) { target = hit.object.el; break; }
-        }
-
-        // Fallback: check _hoveredEl
-        if (!target && this._hoveredEl) {
-          const comp = this._hoveredEl.components.grabbable;
-          if (comp && !comp.held) target = this._hoveredEl;
-        }
-
-        if (target) {
-          this.heldObject = target;
-          target.components.grabbable.grab(this.el);
-          this._pulse();
-        }
-      },
-
-      _tryDrop () {
-        if (!this.heldObject) return;
-        this.heldObject.components.grabbable.release();
-        this.heldObject = null;
-        this._pulse();
-      },
-
-      _pulse () {
-        // Visual feedback on controller
-        const mesh = this.el.getObject3D('mesh');
-        if (!mesh) return;
-        const orig = { x: mesh.scale.x, y: mesh.scale.y, z: mesh.scale.z };
-        mesh.scale.set(1.2, 1.2, 1.2);
-        setTimeout(() => mesh.scale.set(orig.x, orig.y, orig.z), 120);
-      }
-    });
-
-    /* ── snap-to-target component (drop zones) ──────────────────────────*/
-    AFRAME.registerComponent('drop-zone', {
-      schema: { color: { type: 'color', default: '#00ff88' } },
-      init () {
-        this.el.addEventListener('mouseenter', e => {
-          // Check if a held object is near
-          const mesh = this.el.getObject3D('mesh');
-          if (mesh) {
-            mesh.material.emissive = new THREE.Color(this.data.color);
-            mesh.material.emissiveIntensity = 0.5;
-          }
-        });
-        this.el.addEventListener('mouseleave', () => {
-          const mesh = this.el.getObject3D('mesh');
-          if (mesh) mesh.material.emissiveIntensity = 0;
-        });
-      }
-    });
-  </script>
-
-  <!-- ══════════════════════════════════════════
-       ASSETS
-  ══════════════════════════════════════════ -->
-  <a-assets>
-    <img id="grid-tex"
-      src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Crect fill='%23111' width='100' height='100'/%3E%3Cpath d='M0 0 L100 0 L100 100 L0 100 Z' fill='none' stroke='%23333' stroke-width='1'/%3E%3C/svg%3E"
-    />
-  </a-assets>
-
-  <!-- ══════════════════════════════════════════
-       ENVIRONMENT
-  ══════════════════════════════════════════ -->
-
-  <!-- Floor -->
-  <a-plane
-    position="0 0 0" rotation="-90 0 0"
-    width="20" height="20"
-    color="#111"
-    repeat="10 10"
-    src="#grid-tex"
-    shadow="receive: true"
-  ></a-plane>
-
-  <!-- Ambient + directional light -->
-  <a-light type="ambient"     color="#334" intensity="1.2"></a-light>
-  <a-light type="directional" color="#fff" intensity="0.8"
-    position="3 6 4" cast-shadow="true"></a-light>
-  <a-light type="point" color="#0ff" intensity="0.5"
-    position="0 3 -3"></a-light>
-
-  <!-- Back wall decoration -->
-  <a-plane position="0 3 -6" width="12" height="6"
-    color="#0a0a2a" opacity="0.8"
-    material="shader:flat"></a-plane>
-  <a-text value="TechXR · GRAB & DROP" align="center"
-    position="0 4 -5.9" color="#0ff"
-    font="https://cdn.aframe.io/fonts/Exo2Bold.fnt"
-    width="8"></a-text>
-
-  <!-- ══════════════════════════════════════════
-       GRABBABLE OBJECTS
-  ══════════════════════════════════════════ -->
-
-  <!-- Cube -->
-  <a-box
-    id="cube1"
-    position="-1.5 1.2 -2.5"
-    rotation="30 45 0"
-    width="0.35" height="0.35" depth="0.35"
-    color="#ff4466"
-    shadow="cast:true; receive:true"
-    grabbable
-    raycaster-target
-  ></a-box>
-
-  <!-- Sphere -->
-  <a-sphere
-    id="sphere1"
-    position="0 1.2 -2.5"
-    radius="0.2"
-    color="#44aaff"
-    shadow="cast:true; receive:true"
-    grabbable
-    raycaster-target
-  ></a-sphere>
-
-  <!-- Cone -->
-  <a-cone
-    id="cone1"
-    position="1.5 1.2 -2.5"
-    height="0.45" radius-bottom="0.2" radius-top="0"
-    color="#ffcc00"
-    shadow="cast:true; receive:true"
-    grabbable
-    raycaster-target
-  ></a-cone>
-
-  <!-- Torus -->
-  <a-torus
-    id="torus1"
-    position="-0.7 1.5 -2"
-    radius="0.18" radius-tubular="0.05"
-    color="#aa44ff"
-    shadow="cast:true; receive:true"
-    grabbable
-    raycaster-target
-  ></a-torus>
-
-  <!-- Dodecahedron (icosahedron proxy) -->
-  <a-icosahedron
-    id="ico1"
-    position="0.7 1.5 -2"
-    radius="0.2"
-    color="#44ffaa"
-    shadow="cast:true; receive:true"
-    grabbable
-    raycaster-target
-  ></a-icosahedron>
-
-  <!-- ══════════════════════════════════════════
-       DROP ZONES (pedestals)
-  ══════════════════════════════════════════ -->
-  <a-cylinder position="-1.5 0.5 -3.5" radius="0.3" height="1"
-    color="#1a1a3a" drop-zone></a-cylinder>
-  <a-cylinder position="0    0.5 -3.5" radius="0.3" height="1"
-    color="#1a1a3a" drop-zone></a-cylinder>
-  <a-cylinder position="1.5  0.5 -3.5" radius="0.3" height="1"
-    color="#1a1a3a" drop-zone></a-cylinder>
-
-  <!-- Zone labels -->
-  <a-text value="Zone A" position="-1.5 1.1 -3.5"
-    align="center" color="#0ff" width="2"></a-text>
-  <a-text value="Zone B" position="0    1.1 -3.5"
-    align="center" color="#0ff" width="2"></a-text>
-  <a-text value="Zone C" position="1.5  1.1 -3.5"
-    align="center" color="#0ff" width="2"></a-text>
-
-  <!-- ══════════════════════════════════════════
-       CAMERA RIG
-  ══════════════════════════════════════════ -->
-  <a-entity id="rig" position="0 0 1.5">
-
-    <a-camera id="camera" look-controls wasd-controls>
-      <!-- Desktop cursor for testing without VR -->
-      <a-cursor
-        color="#0ff"
-        fuse="false"
-        raycaster="objects: [grabbable]; far: 8"
-      ></a-cursor>
-    </a-camera>
-
-    <!-- ── RIGHT HAND ──────────────────────────────── -->
-    <a-entity
-      id="right-controller"
-      techxr-controller="hand: right"
-      oculus-touch-controls="hand: right"
-      vive-controls="hand: right"
-      windows-motion-controls="hand: right"
-      hand-controls="hand: right"
-      raycaster="objects: [grabbable]; showLine: true; far: 8; lineColor: #0ff; lineOpacity: 0.6"
-      position="0.2 -0.3 -0.5"
-    >
-      <!-- Controller model fallback -->
-      <a-box width="0.04" height="0.12" depth="0.04"
-        color="#0ff" opacity="0.8" position="0 0 0"></a-box>
-      <!-- Ray visual hint -->
-      <a-entity
-        geometry="primitive: cylinder; radius: 0.004; height: 0.3"
-        material="color: #0ff; opacity: 0.4; shader: flat"
-        position="0 0 -0.15" rotation="90 0 0"
-      ></a-entity>
-    </a-entity>
-
-    <!-- ── LEFT HAND ───────────────────────────────── -->
-    <a-entity
-      id="left-controller"
-      techxr-controller="hand: left"
-      oculus-touch-controls="hand: left"
-      vive-controls="hand: left"
-      windows-motion-controls="hand: left"
-      hand-controls="hand: left"
-      raycaster="objects: [grabbable]; showLine: true; far: 8; lineColor: #f0f; lineOpacity: 0.6"
-      position="-0.2 -0.3 -0.5"
-    >
-      <a-box width="0.04" height="0.12" depth="0.04"
-        color="#f0f" opacity="0.8" position="0 0 0"></a-box>
-      <a-entity
-        geometry="primitive: cylinder; radius: 0.004; height: 0.3"
-        material="color: #f0f; opacity: 0.4; shader: flat"
-        position="0 0 -0.15" rotation="90 0 0"
-      ></a-entity>
-    </a-entity>
-
-  </a-entity><!-- end rig -->
-
-  <!-- ══════════════════════════════════════════
-       FLOATING PARTICLES (atmosphere)
-  ══════════════════════════════════════════ -->
-  <script>
-    // Spawn 40 tiny ambient particles
-    const scene = document.querySelector('a-scene');
-    for (let i = 0; i < 40; i++) {
-      const p = document.createElement('a-sphere');
-      const x = (Math.random() - 0.5) * 10;
-      const y =  Math.random() * 4 + 0.2;
-      const z = (Math.random() - 0.5) * 10 - 2;
-      const r = (Math.random() * 0.03 + 0.01).toFixed(3);
-      const hue = Math.floor(Math.random() * 360);
-      p.setAttribute('position', `${x} ${y} ${z}`);
-      p.setAttribute('radius', r);
-      p.setAttribute('color', `hsl(${hue},100%,70%)`);
-      p.setAttribute('material', 'shader: flat; opacity: 0.5');
-      // gentle float animation
-      const dur = 3000 + Math.random() * 4000;
-      p.setAttribute('animation', `property: position; dir: alternate; loop: true;
-        dur: ${dur}; easing: easeInOutSine;
-        to: ${x} ${(y + 0.4).toFixed(2)} ${z}`);
-      scene.appendChild(p);
-    }
-  </script>
+<a-camera position="0 1.6 0" controller-grab></a-camera>
 
 </a-scene>
 
-<!-- ══ Keyboard shortcut hint (desktop) ══ -->
-<script>
-  // Desktop fallback: press G to grab/drop nearest object using mouse cursor
-  document.addEventListener('keydown', e => {
-    if (e.key === 'g' || e.key === 'G') {
-      const cursor = document.querySelector('a-cursor');
-      if (cursor) {
-        cursor.emit('mousedown');
-        setTimeout(() => cursor.emit('mouseup'), 150);
-      }
-    }
-  });
-</script>
 </body>
 </html>
