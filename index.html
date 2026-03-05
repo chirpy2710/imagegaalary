@@ -1,105 +1,55 @@
 <!DOCTYPE html>
+
 <html>
 <head>
-  <title>A-Frame 360 Gallery - TECHXR Controller</title>
+  <meta charset="utf-8">
+  <title>A-Frame Grab Cube</title>
 
   <!-- A-Frame -->
-  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 
-  <script>
-    // Change scene when trigger pressed on hotspot
-    AFRAME.registerComponent('controller-change-scene', {
-      init: function () {
+  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
 
-        this.el.addEventListener('triggerdown', () => {
+  <!-- Super Hands for grab interaction -->
 
-          let intersectedEls = this.el.components.raycaster.intersectedEls;
+  <script src="https://unpkg.com/super-hands@4.0.5/dist/super-hands.min.js"></script>
 
-          if (intersectedEls.length > 0) {
-            let target = intersectedEls[0].getAttribute('data-target');
-            if (target) {
-              document.querySelector('#sky').setAttribute('src', target);
-            }
-          }
-
-        });
-      }
-    });
-  </script>
 </head>
 
-<body style="margin:0; overflow:hidden;">
+<body>
 
 <a-scene>
 
-  <!-- Load LOCAL images -->
-  <a-assets>
-    <img id="img1" src="img1.jpg">
-    <img id="img2" src="img2.jpg">
-    <img id="img3" src="img3.jpg">
-  </a-assets>
-
   <!-- Camera -->
-  <a-camera position="0 1.6 0"></a-camera>
 
-  <!-- TECHXR Right Controller -->
-  <a-entity
-      id="rightHand"
-      laser-controls="hand: right"
-      raycaster="objects: .clickable; showLine: true"
-      controller-change-scene>
-  </a-entity>
+<a-entity camera position="0 1.6 0" look-controls></a-entity>
 
-  <!-- 360 Sky -->
-  <a-sky id="sky" src="#img1" rotation="0 -130 0"></a-sky>
+  <!-- VR Controllers -->
 
-  <!-- Hotspot 1 -->
-  <a-circle class="clickable"
-            position="-2 1.5 -3"
-            radius="0.3"
-            color="red"
-            data-target="#img1">
-  </a-circle>
+<a-entity laser-controls="hand: left"
+         super-hands
+         raycaster="objects: .grabbable"> </a-entity>
 
-  <a-text value="Living Room"
-          position="-2 2.1 -3"
-          color="white"
-          align="center"
-          width="3">
-  </a-text>
+<a-entity laser-controls="hand: right"
+         super-hands
+         raycaster="objects: .grabbable"> </a-entity>
 
-  <!-- Hotspot 2 -->
-  <a-circle class="clickable"
-            position="0 1.5 -3"
-            radius="0.3"
-            color="blue"
-            data-target="#img2">
-  </a-circle>
+  <!-- Floor -->
 
-  <a-text value="Kitchen"
-          position="0 2.1 -3"
-          color="white"
-          align="center"
-          width="3">
-  </a-text>
+<a-plane rotation="-90 0 0" width="10" height="10" color="#7BC8A4"></a-plane>
 
-  <!-- Hotspot 3 -->
-  <a-circle class="clickable"
-            position="2 1.5 -3"
-            radius="0.3"
-            color="green"
-            data-target="#img3">
-  </a-circle>
+  <!-- Cube to grab -->
 
-  <a-text value="Bedroom"
-          position="2 2.1 -3"
-          color="white"
-          align="center"
-          width="3">
-  </a-text>
+<a-box class="grabbable"
+      position="0 1 -1"
+      depth="0.3"
+      height="0.3"
+      width="0.3"
+      color="red"
+      grabbable
+      draggable
+      droppable> </a-box>
 
 </a-scene>
 
 </body>
 </html>
-
